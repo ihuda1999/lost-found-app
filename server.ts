@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
@@ -178,6 +179,64 @@ async function startServer() {
     res.json({
       appId: process.env.FEISHU_APP_ID || "cli_aaaaaca94278dcff"
     });
+  });
+
+  // Helper: get app access token
+  async function getFeishuAppAccessToken(): Promise<string | null> {
+    const appId = process.env.FEISHU_APP_ID || "cli_aaaaaca94278dcff";
+    const appSecret = process.env.FEISHU_APP_SECRET || "G0NGEocPASsjlHNsULjmgcUwNPZdlyZo";
+    const tokenRes = await fetch('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_id: appId, app_secret: appSecret })
+    });
+    const tokenData = await tokenRes.json();
+    return tokenData.app_access_token || null;
+  }
+
+  // API Route to generate JSAPI config (ticket + signature)
+  app.post("/api/feishu/jsapi-config", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: "Missing url parameter" });
+
+      const appId = process.env.FEISHU_APP_ID || "cli_aaaaaca94278dcff";
+      const appAccessToken = await getFeishuAppAccessToken();
+      if (!appAccessToken) {
+        throw new Error("Failed to get feishu app_access_token");
+      }
+
+      // Get jsapi_ticket
+      const ticketRes = await fetch('https://open.feishu.cn/open-apis/jssdk/ticket/get', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${appAccessToken}`
+        },
+        body: JSON.stringify({})
+      });
+      const ticketData = await ticketRes.json();
+      if (ticketData.code !== 0) {
+        throw new Error("Failed to get jsapi_ticket: " + JSON.stringify(ticketData));
+      }
+      const ticket = ticketData.data.ticket;
+
+      // Generate signature
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonceStr = Math.random().toString(36).substring(2, 15);
+      const rawString = `jsapi_ticket=${ticket}&noncestr=${nonceStr}&timestamp=${timestamp}&url=${url}`;
+      const signature = crypto.createHash('sha1').update(rawString).digest('hex');
+
+      res.json({
+        appId,
+        timestamp,
+        nonceStr,
+        signature
+      });
+    } catch (error: any) {
+      console.error("Feishu JSAPI Config Error:", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
   });
 
   // API Route to authenticate Feishu user via OAuth code

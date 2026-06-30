@@ -49,10 +49,10 @@ export default function App() {
   // Feishu / Lark silent authentication inside Feishu Client App
   useEffect(() => {
     // Detect if we are running inside Feishu or Lark client
-    const isFeishuClient = /Feishu|Lark/i.test(navigator.userAgent) || 
-                          typeof (window as any).h5sdk !== 'undefined' || 
+    const isFeishuClient = /Feishu|Lark/i.test(navigator.userAgent) ||
+                          typeof (window as any).h5sdk !== 'undefined' ||
                           typeof (window as any).tt !== 'undefined';
-    
+
     // If in Feishu client but stored user is mock/manual, clear it and re-authenticate
     if (isFeishuClient && currentUser && (currentUser.isMock || currentUser.isManual)) {
       console.log('Feishu client detected but user is mock/manual, clearing and re-authenticating...');
@@ -62,86 +62,106 @@ export default function App() {
     }
 
     if (currentUser) return;
-    
+
     if (isFeishuClient) {
       console.log("Detected Feishu client environment. Initiating silent authentication...");
       setIsAuthenticating(true);
       setAuthError(null);
       let attempts = 0;
-      
+
       const doSilentAuth = () => {
         const h5sdk = (window as any).h5sdk;
         const tt = (window as any).tt;
-        
-        if (h5sdk && tt) {
-          try {
+
+        if (h5sdk) {
+          // 1. Get JSAPI signature from backend
+          const currentUrl = window.location.href.split('#')[0];
+          fetch('/api/feishu/jsapi-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: currentUrl })
+          })
+          .then(res => res.json())
+          .then(jsapiConfig => {
+            if (jsapiConfig.error) {
+              throw new Error(jsapiConfig.error);
+            }
+            console.log('JSAPI config:', jsapiConfig);
+
+            // 2. Configure H5 SDK
+            h5sdk.config({
+              appId: jsapiConfig.appId,
+              timestamp: jsapiConfig.timestamp,
+              nonceStr: jsapiConfig.nonceStr,
+              signature: jsapiConfig.signature,
+              jsApiList: ['requestAuthCode'],
+              success() {
+                console.log('h5sdk.config success');
+              },
+              fail(err: any) {
+                console.error('h5sdk.config failed:', err);
+                setAuthError('飞书 H5 SDK 鉴权失败: ' + (err?.errMsg || JSON.stringify(err)));
+                setIsAuthenticating(false);
+              }
+            });
+
+            // 3. After SDK is ready, request auth code
             h5sdk.ready(() => {
-              // Fetch the dynamically configured appId first
-              fetch('/api/feishu/config')
-                .then(res => res.json())
-                .then(config => {
-                  const resolvedAppId = config.appId || 'cli_aaaaaca94278dcff';
-                  console.log('Using Feishu App ID:', resolvedAppId);
-                  
-                  tt.requestAuthCode({
-                    appId: resolvedAppId,
-                    success(info: { code: string }) {
-                      console.log('Feishu silent auth code obtained successfully:', info.code);
-                      fetch('/api/feishu/auth', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code: info.code })
-                      })
-                      .then(res => res.json())
-                      .then(data => {
-                        if (data.success && data.user) {
-                          const user = {
-                            name: data.user.name,
-                            avatar: data.user.avatar_url,
-                            role: 'receptionist',
-                            openId: data.user.open_id,
-                            unionId: data.user.union_id,
-                            userId: data.user.user_id
-                          };
-                          localStorage.setItem('currentUser', JSON.stringify(user));
-                          setCurrentUser(user);
-                          console.log('Successfully logged in inside Feishu as:', user.name);
-                        } else {
-                          console.error('Feishu silent login backend error:', data.error);
-                          setAuthError('飞书免登后端错误: ' + (data.error || '未知错误'));
-                          setIsAuthenticating(false);
-                        }
-                      })
-                      .catch(err => {
-                        console.error('Feishu silent login fetch failed:', err);
-                        setAuthError('与后台通讯失败: ' + err.message);
-                        setIsAuthenticating(false);
-                      });
-                    },
-                    fail(err: any) {
-                      console.error('Feishu tt.requestAuthCode failed:', err);
-                      setAuthError(`获取授权码(tt.requestAuthCode)失败: ${JSON.stringify(err)}。 请确认在飞书开放平台-安全设置中将此域名添加到“H5应用安全域名-信任域名”，并在飞书客户端中打开此应用。`);
+              console.log('h5sdk.ready fired');
+              tt.requestAuthCode({
+                appId: jsapiConfig.appId,
+                success(info: { code: string }) {
+                  console.log('Feishu silent auth code obtained successfully:', info.code);
+                  fetch('/api/feishu/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: info.code })
+                  })
+                  .then(res => res.json())
+                  .then(data => {
+                    if (data.success && data.user) {
+                      const user = {
+                        name: data.user.name,
+                        avatar: data.user.avatar_url,
+                        role: 'receptionist',
+                        openId: data.user.open_id,
+                        unionId: data.user.union_id,
+                        userId: data.user.user_id
+                      };
+                      localStorage.setItem('currentUser', JSON.stringify(user));
+                      setCurrentUser(user);
+                      console.log('Successfully logged in inside Feishu as:', user.name);
+                    } else {
+                      console.error('Feishu silent login backend error:', data.error);
+                      setAuthError('飞书免登后端错误: ' + (data.error || '未知错误'));
                       setIsAuthenticating(false);
                     }
+                  })
+                  .catch(err => {
+                    console.error('Feishu silent login fetch failed:', err);
+                    setAuthError('与后台通讯失败: ' + err.message);
+                    setIsAuthenticating(false);
                   });
-                })
-                .catch(err => {
-                  console.error('Failed to load Feishu config:', err);
-                  setAuthError('加载后台配置失败: ' + err.message);
+                },
+                fail(err: any) {
+                  console.error('Feishu tt.requestAuthCode failed:', err);
+                  setAuthError(`获取授权码失败: ${err?.errMsg || JSON.stringify(err)}。请确认在飞书开放平台-安全设置中将此域名添加到“H5应用安全域名/可信域名”，并在飞书客户端中打开此应用。`);
                   setIsAuthenticating(false);
-                });
+                }
+              });
             });
-          } catch (e: any) {
-            console.error('Feishu H5 SDK configuration failed:', e);
-            setAuthError('飞书 H5 SDK 初始化失败: ' + e.message);
+          })
+          .catch(err => {
+            console.error('Failed to load Feishu JSAPI config:', err);
+            setAuthError('加载飞书 JSAPI 配置失败: ' + err.message);
             setIsAuthenticating(false);
-          }
-        } else if (attempts < 15) {
+          });
+        } else if (attempts < 30) {
           attempts++;
           // Retry in case script is still loading
           setTimeout(doSilentAuth, 200);
         } else {
-          console.warn('Feishu/Lark H5 SDK could not be loaded after 15 attempts.');
+          console.warn('Feishu/Lark H5 SDK could not be loaded after 30 attempts.');
           setAuthError('未检测到飞书/Lark客户端 H5 JS-SDK 运行环境。如果您在外部浏览器，请等待自动跳转。');
           setIsAuthenticating(false);
         }

@@ -48,12 +48,20 @@ export default function App() {
 
   // Feishu / Lark silent authentication inside Feishu Client App
   useEffect(() => {
-    if (currentUser) return;
-
     // Detect if we are running inside Feishu or Lark client
     const isFeishuClient = /Feishu|Lark/i.test(navigator.userAgent) || 
                           typeof (window as any).h5sdk !== 'undefined' || 
                           typeof (window as any).tt !== 'undefined';
+    
+    // If in Feishu client but stored user is mock/manual, clear it and re-authenticate
+    if (isFeishuClient && currentUser && (currentUser.isMock || currentUser.isManual)) {
+      console.log('Feishu client detected but user is mock/manual, clearing and re-authenticating...');
+      localStorage.removeItem('currentUser');
+      setCurrentUser(null);
+      return;
+    }
+
+    if (currentUser) return;
     
     if (isFeishuClient) {
       console.log("Detected Feishu client environment. Initiating silent authentication...");

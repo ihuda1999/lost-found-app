@@ -90,7 +90,10 @@ export default function App() {
                           const user = {
                             name: data.user.name,
                             avatar: data.user.avatar_url,
-                            role: 'receptionist'
+                            role: 'receptionist',
+                            openId: data.user.open_id,
+                            unionId: data.user.union_id,
+                            userId: data.user.user_id
                           };
                           localStorage.setItem('currentUser', JSON.stringify(user));
                           setCurrentUser(user);
@@ -156,7 +159,7 @@ export default function App() {
   const handleReportSubmit = async (item: any) => {
     setIsSubmitting(true);
     try {
-      const payload = { ...item, finderName: currentUser?.name || '未知操作员' };
+      const payload = { ...item, finderName: currentUser?.name || '未知操作员', finderOpenId: currentUser?.openId || '' };
       const response = await fetch('/api/feishu/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

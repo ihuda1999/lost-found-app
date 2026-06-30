@@ -12,7 +12,7 @@ async function startServer() {
   // API Route to submit to Feishu
   app.post("/api/feishu/report", async (req, res) => {
     try {
-      const { name, category, foundLocation, description, isHighValue, overallPhoto, detailPhoto, finderName } = req.body;
+      const { name, category, foundLocation, description, isHighValue, overallPhoto, detailPhoto, finderName, finderOpenId } = req.body;
       
       const appId = process.env.FEISHU_APP_ID || "cli_aaaaaca94278dcff";
       const appSecret = process.env.FEISHU_APP_SECRET || "G0NGEocPASsjlHNsULjmgcUwNPZdlyZo";
@@ -120,9 +120,18 @@ async function startServer() {
           fields["交接码"] = handoverCode;
       }
       if (availableFields.includes("登记人") && finderName) {
-          fields["登记人"] = finderName;
+          // 如果有 open_id，写入人员类型字段；否则写文本
+          if (finderOpenId) {
+            fields["登记人"] = [{ id: finderOpenId }];
+          } else {
+            fields["登记人"] = finderName;
+          }
       } else if (availableFields.includes("记录人") && finderName) {
-          fields["记录人"] = finderName;
+          if (finderOpenId) {
+            fields["记录人"] = [{ id: finderOpenId }];
+          } else {
+            fields["记录人"] = finderName;
+          }
       }
 
       const photos = [];

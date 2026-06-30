@@ -3,6 +3,8 @@ import ReportForm from './components/ReportForm';
 import { SuccessView } from './components/SuccessView';
 import { Loader2 } from 'lucide-react';
 
+const LOGO = import.meta.env.BASE_URL + 'logo.png';
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem('currentUser');
@@ -219,7 +221,7 @@ export default function App() {
 
         <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 border border-slate-100 relative">
           <div className="flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-lg border border-slate-100 mx-auto mb-6">
-            <img src="/logo.png" alt="胡大 Logo" className="w-full h-full object-contain p-2" />
+            <img src={LOGO} alt="胡大 Logo" className="w-full h-full object-contain p-2" />
           </div>
           
           <h1 className="text-2xl font-extrabold text-slate-900 mb-2 text-center">顾客遗失物品管理系统</h1>
@@ -296,7 +298,7 @@ export default function App() {
         <header className="mb-10 flex flex-col items-start">
           <div className="flex items-center gap-4 drop-shadow-sm">
             <div className="flex items-center justify-center w-14 h-14 bg-white rounded-full shadow-md shrink-0 overflow-hidden border-2 border-white">
-              <img src="/logo.png" alt="胡大" className="w-full h-full object-contain p-1" />
+              <img src={LOGO} alt="胡大" className="w-full h-full object-contain p-1" />
             </div>
             <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
               顾客遗失物品登记单
